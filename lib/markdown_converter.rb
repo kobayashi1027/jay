@@ -371,6 +371,67 @@ class JayRemoveMarkupElements < HTML::Pipeline::TextFilter
   end
 end
 
+#
+# Fill columns with MAX_COLUMN characters
+#
+class JayFillColumns < HTML::Pipeline::TextFilter
+  MAX_COLUMN = 70
+
+  def call
+    lines = @text.split("\n")
+    @text = lines.each do |line|
+      pos = paragraph_position(line)
+      ljust_with_character_limit(line, MAX_COLUMN, pos, ' ')
+    end.join("\n")
+  end
+
+  private
+
+  def newline_character?(c)
+    small_japanese = "ぁぃぅぇぉゃゅょゎァィゥェォャュョヮ"
+    return (c =~ /^[-,.，．a-zA-Z#{small_japanese}]/) == nil ? true : false
+  end
+
+  def paragraph_position(str)
+    # Example1: "No.100-01 :: Minutes of GN meeting"
+    #                        ^
+    # Example2: "(A) This is ...."
+    #               ^
+    if /(\s*[^\s]+(\s+::)?\s)/ =~ str
+      return mb_length($1)
+    else
+      return 0
+    end
+  end
+
+  # Get length of multi byte characters
+  def mb_length(str)
+    return 0 if str.nil? || str.empty?
+    return str.each_char.map{|c| c.ascii_only? ? 1 : 2}.inject(:+)
+  end
+
+  # Get index of str where n = length of multi byte characters
+  def index_of_mb_length(str, n)
+    return nil if str.nil? || str.empty?
+    cnt = 0
+    str.each_char.each.with_index do |c, index|
+      cnt += c.ascii_only? ? 1 : 2
+      return index if cnt > n
+    end
+    return nil
+  end
+
+  def ljust_with_character_limit(line, n, pos, pad)
+    i = 0
+    while mb_length(line[i, line.length]) > n
+      i += index_of_mb_length(line[i, line.length], n)
+      i += 1 while !newline_character?(line[i])
+      line.insert(i, "\n#{pad * pos}") if line.length > i
+      i += 1
+    end
+  end
+end
+
 ################################################################
 ## HTML to HTML filters
 
@@ -567,6 +628,7 @@ class JayFlavoredMarkdownToPlainTextConverter
       JayAddLabelToListItems,
       JayAddCrossReference,
       JayRemoveMarkupElements,
+      JayFillColumns,
     ], context.merge(@options)
   end
 end
